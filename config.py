@@ -7,7 +7,6 @@ import json
 import platform
 import re
 import yaml
-# import utils
 from category import *
 from constants import *
 from exception import exception, ConfigException
@@ -28,6 +27,7 @@ NETWORK_MAP = {
     'ResNetTiny': CNNNetwork.ResNetTiny,
     'ResNet50': CNNNetwork.ResNet50,
     'DenseNet': CNNNetwork.DenseNet,
+    'MobileNetV2': CNNNetwork.MobileNetV2,
     'LSTM': RecurrentNetwork.LSTM,
     'BiLSTM': RecurrentNetwork.BiLSTM,
     'GRU': RecurrentNetwork.GRU,
@@ -53,8 +53,9 @@ BUILT_IN_CATEGORY_MAP = {
 }
 
 OPTIMIZER_MAP = {
-    'AdaBound': Optimizer.AdaBound,
+    'RAdam': Optimizer.RAdam,
     'Adam': Optimizer.Adam,
+    'AdaBound': Optimizer.AdaBound,
     'Momentum': Optimizer.Momentum,
     'SGD': Optimizer.SGD,
     'AdaGrad': Optimizer.AdaGrad,
@@ -68,6 +69,12 @@ MODEL_SCENE_MAP = {
 LOSS_FUNC_MAP = {
     'CTC': LossFunction.CTC,
     'CrossEntropy': LossFunction.CrossEntropy
+}
+
+COMPILE_MODEL_MAP = {
+    ModelType.PB: ".pb",
+    ModelType.ONNX: ".onnx",
+    ModelType.TFLITE: ".tflite"
 }
 
 RESIZE_MAP = {
@@ -96,12 +103,12 @@ OUTPUT_SHAPE1_MAP = {
     CNNNetwork.CNNX: [8, 64],
     CNNNetwork.ResNetTiny: [16, 1024],
     CNNNetwork.ResNet50: [16, 2048],
-    CNNNetwork.DenseNet: [32, 2048]
+    CNNNetwork.DenseNet: [32, 2048],
+    CNNNetwork.MobileNetV2: [32, 1200]
 }
 
 
 class DataAugmentationEntity:
-
     binaryzation: object = -1
     median_blur: int = -1
     gaussian_blur: int = -1
@@ -110,26 +117,24 @@ class DataAugmentationEntity:
     warp_perspective: bool = False
     rotate: int = -1
     sp_noise: float = -1.0
-    brightness: bool = True
-    saturation: bool = True
-    hue: bool = True
-    gamma: bool = True
-    channel_swap: bool = True
-    random_blank: int = 3
-    random_transition: int = 5
+    brightness: bool = False
+    saturation: bool = False
+    hue: bool = False
+    gamma: bool = False
+    channel_swap: bool = False
+    random_blank: int = -1
+    random_transition: int = -1
 
 
 class PretreatmentEntity:
-
     binaryzation: object = -1
     concat_frames: object = -1
     blend_frames: object = -1
-    replace_transparent: bool = False
+    replace_transparent: bool = True
     horizontal_stitching: bool = False
 
 
 class ModelConfig:
-
     """MODEL"""
     model_root: dict
     model_name: str
@@ -151,6 +156,7 @@ class ModelConfig:
     image_height: int
     resize: list
     max_label_num: int
+    auto_padding: bool
     output_split: str
 
     """NEURAL NETWORK"""
@@ -193,7 +199,7 @@ class ModelConfig:
 
     """DATA AUGMENTATION"""
     data_augmentation_root: dict
-    da_binaryzation: int
+    da_binaryzation: list
     da_median_blur: int
     da_gaussian_blur: int
     da_equalize_hist: bool
@@ -220,11 +226,14 @@ class ModelConfig:
     """COMPILE_MODEL"""
     compile_model_path: str
 
-    def __init__(self, project_name, project_path=None, **argv):
+    def __init__(self, project_name, project_path=None, is_dev=True, **argv):
+        self.is_dev = is_dev
         self.project_path = project_path if project_path else "./projects/{}".format(project_name)
+        self.output_path = os.path.join(self.project_path, 'out')
+        self.compile_conf_path = os.path.join(self.output_path, 'model')
+        self.compile_conf_path = os.path.join(self.compile_conf_path, "{}_model.yaml".format(project_name))
         self.model_root_path = os.path.join(self.project_path, 'model')
         self.model_conf_path = os.path.join(self.project_path, MODEL_CONFIG_NAME)
-        self.output_path = os.path.join(self.project_path, 'out')
         self.dataset_root_path = os.path.join(self.project_path, 'dataset')
         self.checkpoint_tag = 'checkpoint'
 
@@ -257,6 +266,7 @@ class ModelConfig:
         """SYSTEM"""
         self.system_root = self.conf['System']
         self.memory_usage = self.system_root.get('MemoryUsage')
+        self.model_version = self.system_root.get("Version")
         self.save_model = os.path.join(self.model_root_path, self.model_tag)
         self.save_checkpoint = os.path.join(self.model_root_path, self.checkpoint_tag)
 
@@ -269,6 +279,7 @@ class ModelConfig:
         self.image_height = self.field_root.get('ImageHeight')
         self.resize = self.field_root.get('Resize')
         self.max_label_num = self.field_root.get('MaxLabelNum')
+        self.auto_padding = self.field_root.get('AutoPadding')
         self.output_split = self.field_root.get('OutputSplit')
 
         """NEURAL NETWORK"""
@@ -280,7 +291,7 @@ class ModelConfig:
 
         self.units_num = self.neu_network_root.get('UnitsNum')
         self.neu_optimizer_param = self.neu_network_root.get('Optimizer')
-        self.neu_optimizer_param = self.neu_optimizer_param if self.neu_optimizer_param else 'AdaBound'
+        self.neu_optimizer_param = self.neu_optimizer_param if self.neu_optimizer_param else 'RAdam'
 
         self.output_layer = self.neu_network_root.get('OutputLayer')
         self.loss_func_param = self.output_layer.get('LossFunction')
@@ -465,7 +476,7 @@ class ModelConfig:
 
     @property
     def conf(self) -> dict:
-        with open(self.model_conf_path, 'r', encoding="utf-8") as sys_fp:
+        with open(self.model_conf_path if self.is_dev else self.compile_conf_path, 'r', encoding="utf-8") as sys_fp:
             sys_stream = sys_fp.read()
             return yaml.load(sys_stream, Loader=yaml.SafeLoader)
 
@@ -506,6 +517,7 @@ class ModelConfig:
                 ImageWidth=self.image_width,
                 ImageHeight=self.image_height,
                 MaxLabelNum=self.max_label_num,
+                AutoPadding=self.auto_padding,
                 OutputSplit=self.val_filter(self.output_split),
                 LabelFrom=self.label_from.value,
                 ExtractRegex=self.val_filter(self.extract_regex),
@@ -587,6 +599,7 @@ class ModelConfig:
         self.image_width = argv.get('ImageWidth')
         self.image_height = argv.get('ImageHeight')
         self.max_label_num = argv.get('MaxLabelNum')
+        self.auto_padding = argv.get('AutoPadding')
         self.output_split = argv.get('OutputSplit')
         self.label_from_param = argv.get('LabelFrom')
         self.extract_regex = argv.get('ExtractRegex')

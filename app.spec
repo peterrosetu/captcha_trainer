@@ -1,9 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
-
+import time
 # block_cipher = pyi_crypto.PyiBlockCipher(key='')
 block_cipher = None
 
-added_files = [('resource/icon.ico', 'resource'), ('model.template', '.')]
+added_files = [('resource/icon.ico', 'resource'), ('model.template', '.'), ('resource/VERSION', 'astor')]
 
 a = Analysis(['app.py'],
              pathex=['.'],
@@ -37,4 +37,4 @@ coll = COLLECT(exe,
                strip=False,
                upx=True,
                upx_exclude=[],
-               name='app')
+               name='gpu-win64-{}'.format(time.strftime("%Y%m%d", time.localtime())))

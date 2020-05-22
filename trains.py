@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 # Author: kerlomz <kerlomz@gmail.com>
+
 import tensorflow as tf
 import core
 import utils
@@ -9,6 +10,7 @@ import validation
 from config import *
 from tf_graph_util import convert_variables_to_constants
 from PIL import ImageFile
+from tf_onnx_util import convert_onnx
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.INFO)
@@ -18,12 +20,39 @@ class Trains:
 
     stop_flag: bool = False
     """训练任务的类"""
+
     def __init__(self, model_conf: ModelConfig):
         """
         :param model_conf: 读取工程配置文件
         """
         self.model_conf = model_conf
         self.validation = validation.Validation(self.model_conf)
+
+    @staticmethod
+    def compile_onnx(predict_sess, output_graph_def, input_path):
+        convert_onnx(
+            sess=predict_sess,
+            graph_def=output_graph_def,
+            input_path=input_path,
+            inputs_op="input:0",
+            outputs_op="dense_decoded:0"
+        )
+
+    @staticmethod
+    def compile_tflite(input_path):
+        input_tensor_name = ["input"]
+        classes_tensor_name = ["dense_decoded"]
+
+        converter = tf.lite.TFLiteConverter.from_frozen_graph(
+            input_path,
+            input_tensor_name,
+            classes_tensor_name,
+        )
+        # converter.post_training_quantize = True
+        tflite_model = converter.convert()
+        output_path = input_path.replace(".pb", ".tflite")
+        with open(output_path, "wb") as f:
+            f.write(tflite_model)
 
     def compile_graph(self, acc):
         """
@@ -38,7 +67,7 @@ class Trains:
             model = core.NeuralNetwork(
                 model_conf=self.model_conf,
                 mode=RunMode.Predict,
-                cnn=self.model_conf.neu_cnn,
+                backbone=self.model_conf.neu_cnn,
                 recurrent=self.model_conf.neu_recurrent
             )
             model.build_graph()
@@ -46,7 +75,6 @@ class Trains:
             saver = tf.train.Saver(var_list=tf.global_variables())
             tf.logging.info(tf.train.latest_checkpoint(self.model_conf.model_root_path))
             saver.restore(predict_sess, tf.train.latest_checkpoint(self.model_conf.model_root_path))
-            tf.keras.backend.set_session(session=predict_sess)
 
             output_graph_def = convert_variables_to_constants(
                 predict_sess,
@@ -61,10 +89,13 @@ class Trains:
             os.path.join(self.model_conf.compile_model_path, "{}.pb".format(self.model_conf.model_name))
         ).replace('.pb', '_{}.pb'.format(int(acc * 10000)))
 
+        self.model_conf.output_config(target_model_name="{}_{}".format(self.model_conf.model_name, int(acc * 10000)))
         with tf.io.gfile.GFile(last_compile_model_path, mode='wb') as gf:
             gf.write(output_graph_def.SerializeToString())
 
-        self.model_conf.output_config(target_model_name="{}_{}".format(self.model_conf.model_name, int(acc * 10000)))
+        if self.model_conf.loss_func == LossFunction.CrossEntropy:
+            self.compile_onnx(predict_sess, output_graph_def, last_compile_model_path)
+        # self.compile_tflite(last_compile_model_path)
 
     def achieve_cond(self, acc, cost, epoch):
         achieve_accuracy = acc >= self.model_conf.trains_end_acc
@@ -84,9 +115,9 @@ class Trains:
         self.model_conf.println()
         # 定义网络结构
         model = core.NeuralNetwork(
-            model_conf=self.model_conf,
             mode=RunMode.Trains,
-            cnn=self.model_conf.neu_cnn,
+            model_conf=self.model_conf,
+            backbone=self.model_conf.neu_cnn,
             recurrent=self.model_conf.neu_recurrent
         )
         model.build_graph()
@@ -105,12 +136,14 @@ class Trains:
             exception("The number of training sets cannot be less than the test set.", )
 
         num_train_samples = train_feeder.size
-        num_test_samples = validation_feeder.size
-        if num_test_samples < self.model_conf.validation_batch_size:
-            exception(
-                "The number of test sets cannot be less than the test batch size.",
-                ConfigException.INSUFFICIENT_SAMPLE
-            )
+        num_validation_samples = validation_feeder.size
+
+        if num_validation_samples < self.model_conf.validation_batch_size:
+            self.model_conf.validation_batch_size = num_validation_samples
+            tf.logging.warn(
+                'The number of validation sets is less than the validation batch size, '
+                'will use validation set size as validation batch size.'.format(validation_feeder.size))
+
         num_batches_per_epoch = int(num_train_samples / self.model_conf.batch_size)
         # 会话配置
         sess_config = tf.compat.v1.ConfigProto(
@@ -123,8 +156,16 @@ class Trains:
         )
         accuracy = 0
         epoch_count = 1
+
+        if num_train_samples < 500:
+            save_step = 10
+            trains_validation_steps = 50
+
+        else:
+            save_step = 100
+            trains_validation_steps = self.model_conf.trains_validation_steps
+
         with tf.compat.v1.Session(config=sess_config) as sess:
-            tf.keras.backend.set_session(session=sess)
             init_op = tf.global_variables_initializer()
             sess.run(init_op)
             saver = tf.train.Saver(var_list=tf.global_variables(), max_to_keep=2)
@@ -157,6 +198,7 @@ class Trains:
                     feed = {
                         model.inputs: batch_inputs,
                         model.labels: batch_labels,
+                        model.utils.is_training: True
                     }
 
                     summary_str, batch_cost, step, _, seq_len = sess.run(
@@ -165,7 +207,7 @@ class Trains:
                     )
                     train_writer.add_summary(summary_str, step)
 
-                    if step % 100 == 0 and step != 0:
+                    if step % save_step == 0 and step != 0:
                         tf.logging.info(
                             'Step: {} Time: {:.3f} sec/batch, Cost = {:.8f}, BatchSize: {}, Shape[1]: {}'.format(
                                 step,
@@ -177,11 +219,11 @@ class Trains:
                         )
 
                     # 达到保存步数对模型过程进行存储
-                    if step % self.model_conf.trains_save_steps == 0 and step != 0:
+                    if step % trains_validation_steps == 0 and step != 0:
                         saver.save(sess, self.model_conf.save_model, global_step=step)
 
                     # 进入验证集验证环节
-                    if step % self.model_conf.trains_validation_steps == 0 and step != 0:
+                    if step % trains_validation_steps == 0 and step != 0:
 
                         batch_time = time.time()
                         validation_batch = validation_feeder.generate_batch_by_tfrecords(sess)
@@ -189,7 +231,8 @@ class Trains:
                         test_inputs, test_labels = validation_batch
                         val_feed = {
                             model.inputs: test_inputs,
-                            model.labels: test_labels
+                            model.labels: test_labels,
+                            model.utils.is_training: False
                         }
                         dense_decoded, lr = sess.run(
                             [model.dense_decoded, model.lrn_rate],
@@ -234,7 +277,5 @@ def main(argv):
 
 
 if __name__ == '__main__':
-
     tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.INFO)
     tf.compat.v1.app.run()
-

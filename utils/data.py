@@ -77,7 +77,8 @@ class DataIterator:
             num_parallel_reads=20
         ).map(self.parse_example)
         dataset_train = dataset_train.shuffle(
-            min_after_dequeue
+            min_after_dequeue,
+            reshuffle_each_iteration=True
         ).batch(batch, drop_remainder=True).repeat()
         iterator = tf.compat.v1.data.make_one_shot_iterator(dataset_train)
         self.next_element = iterator.get_next()
@@ -99,9 +100,10 @@ class DataIterator:
         batch_labels = utils.sparse.sparse_tuple_from_sequences(label_batch)
         return batch_inputs, batch_labels
 
-    def generate_batch_by_tfrecords(self, sess):
+    def generate_batch_by_tfrecords(self, session):
         """根据TFRecords生成当前批次，输入为当前TensorFlow会话，输出为稀疏型X和Y"""
-        _input, _label = sess.run(self.next_element)
+        # print(session.graph)
+        _input, _label = session.run(self.next_element)
         input_batch = []
         label_batch = []
         for index, (i1, i2) in enumerate(zip(_input, _label)):
@@ -111,6 +113,10 @@ class DataIterator:
                     input_array = self.encoder.image(i1)
                 else:
                     input_array = self.encoder.text(i1)
+
+                if input_array is None:
+                    tf.logging.warn("{}, \nCannot identify image file labeled: {}, ignored.".format(input_array, label_array))
+                    continue
 
                 if isinstance(input_array, str):
                     tf.logging.warn("{}, \nInput errors labeled: {}, ignored.".format(input_array, label_array))
@@ -125,9 +131,13 @@ class DataIterator:
 
                 label_len_correct = len(label_array) != self.model_conf.max_label_num
                 using_cross_entropy = self.model_conf.loss_func == LossFunction.CrossEntropy
-                if label_len_correct and using_cross_entropy:
+                if label_len_correct and using_cross_entropy and not self.model_conf.auto_padding:
                     tf.logging.warn("The number of labels must be fixed when using cross entropy, label: {}, "
                                     "the number of tags is incorrect, ignored.".format(i2))
+                    continue
+
+                if len(label_array) > self.model_conf.max_label_num and using_cross_entropy:
+                    tf.logging.warn("The number of label[{}] exceeds the maximum number of labels, ignored.".format(i2))
                     continue
 
                 input_batch.append(input_array)

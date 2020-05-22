@@ -5,6 +5,14 @@ from enum import Enum, unique
 
 
 @unique
+class ModelType(Enum):
+    """模型类别枚举"""
+    PB = 'PB'
+    ONNX = 'ONNX'
+    TFLITE = 'TFLITE'
+
+
+@unique
 class DatasetType(Enum):
     """数据集类别枚举"""
     Directory = 'Directory'
@@ -55,6 +63,7 @@ class CNNNetwork(Enum):
     ResNetTiny = 'ResNetTiny'
     ResNet50 = 'ResNet50'
     DenseNet = 'DenseNet'
+    MobileNetV2 = 'MobileNetV2'
 
 
 @unique
@@ -73,6 +82,7 @@ class RecurrentNetwork(Enum):
 @unique
 class Optimizer(Enum):
     """优化器枚举"""
+    RAdam = 'RAdam'
     Adam = 'Adam'
     Momentum = 'Momentum'
     AdaBound = 'AdaBound'

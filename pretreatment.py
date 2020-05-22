@@ -21,7 +21,7 @@ class Pretreatment(object):
         if isinstance(value, list) and len(value) == 2:
             value = random.randint(value[0], value[1])
         elif isinstance(value, int):
-            value = value if 0 < value < 255 else -1
+            value = value if (0 < value < 255) else -1
         if value == -1:
             return self.origin
         ret, _binarization = cv2.threshold(self.origin, value, 255, cv2.THRESH_BINARY)
@@ -69,17 +69,30 @@ class Pretreatment(object):
         if not value:
             return self.origin
         size = self.origin.shape
+        scale = 1.0
         height, width = size[0], size[1]
-        angle = -random.randint(-value, value)
-        if abs(angle) > 15:
-            _img = cv2.resize(self.origin, (width, int(height / 2)))
-            center = (width / 4, height / 4)
+        center = (width // 2, height // 2)
+
+        if bool(random.getrandbits(1)):
+            angle = random.choice([
+                    -10, -20, -30, -45, -50, -60, -75, -90, -95, -100,
+                    10, 20, 30, 45, 50, 60, 75, 90, 95, 100
+                ])
         else:
-            _img = cv2.resize(self.origin, (width, height))
-            center = (width / 2, height / 2)
-        _img = cv2.resize(self.origin, (width, height))
-        m = cv2.getRotationMatrix2D(center, angle, 1.0)
-        _rotate = cv2.warpAffine(_img, m, (width, height), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+            angle = -random.randint(-value, value)
+
+        m = cv2.getRotationMatrix2D(center, angle, scale)
+        _rotate = cv2.warpAffine(self.origin, m, (width, height))
+        # angle = -random.randint(-value, value)
+        # if abs(angle) > 15:
+        #     _img = cv2.resize(self.origin, (width, int(height / 2)))
+        #     center = (width / 4, height / 4)
+        # else:
+        #     _img = cv2.resize(self.origin, (width, height))
+        #     center = (width / 2, height / 2)
+        # _img = cv2.resize(self.origin, (width, height))
+        # m = cv2.getRotationMatrix2D(center, angle, 1.0)
+        # _rotate = cv2.warpAffine(_img, m, (width, height), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
         if modify:
             self.origin = _rotate
         return _rotate
@@ -213,13 +226,13 @@ def preprocessing(
         warp_perspective=False,
         sp_noise=-1.0,
         rotate=-1,
-        random_blank=True,
-        random_transition=True,
-        random_brightness=True,
+        random_blank=-1,
+        random_transition=-1,
+        random_brightness=False,
         random_gamma=False,
         random_channel_swap=False,
-        random_saturation=True,
-        random_hue=True,
+        random_saturation=False,
+        random_hue=False,
 ):
     """
     各种预处理函数是否启用及参数配置
@@ -238,6 +251,12 @@ def preprocessing(
     :return:
     """
     pretreatment = Pretreatment(image)
+    if rotate > 0 and bool(random.getrandbits(1)):
+        pretreatment.rotate(rotate, True)
+    if random_transition != -1 and bool(random.getrandbits(1)):
+        pretreatment.random_transition(5, True)
+    if 0 < sp_noise < 1 and bool(random.getrandbits(1)):
+        pretreatment.sp_noise(sp_noise, True)
     if binaryzation != -1 and bool(random.getrandbits(1)):
         pretreatment.binarization(binaryzation, True)
     if median_blur != -1 and bool(random.getrandbits(1)):
@@ -248,18 +267,12 @@ def preprocessing(
         pretreatment.equalize_hist(True, True)
     if laplacian and bool(random.getrandbits(1)):
         pretreatment.laplacian(True, True)
-    if rotate > 0 and bool(random.getrandbits(1)):
-        pretreatment.rotate(rotate, True)
     if warp_perspective and bool(random.getrandbits(1)):
         pretreatment.warp_perspective(True)
-    if 0 < sp_noise < 1 and bool(random.getrandbits(1)):
-        pretreatment.sp_noise(sp_noise, True)
     if random_brightness and bool(random.getrandbits(1)):
         pretreatment.random_brightness(True)
-    if random_blank and bool(random.getrandbits(1)):
+    if random_blank != -1 and bool(random.getrandbits(1)):
         pretreatment.random_blank(2, True)
-    if random_transition and bool(random.getrandbits(1)):
-        pretreatment.random_transition(5, True)
     if random_gamma and bool(random.getrandbits(1)):
         pretreatment.random_gamma(True)
     if random_channel_swap and bool(random.getrandbits(1)):
@@ -273,27 +286,26 @@ def preprocessing(
 
 if __name__ == '__main__':
     import io
+    import os
     import PIL.Image
-
-    with open(r"H:\TrainSet\baidu-du_Trains\aaaj_b4eaf7d3ed434e1a627b69ba82f8ce9b.jpg", "rb") as f:
+    import random
+    root_dir = r"H:\img"
+    name = random.choice(os.listdir(root_dir))
+    # name = "3956_b8cee4da-3530-11ea-9778-c2f9192435fa.png"
+    path = os.path.join(root_dir, name)
+    with open(path, "rb") as f:
         path_or_bytes = f.read()
     path_or_stream = io.BytesIO(path_or_bytes)
-    pil_image = PIL.Image.open(path_or_stream)
+    pil_image = PIL.Image.open(path_or_stream).convert("L")
     im = np.array(pil_image)
     im = preprocessing(
         image=im,
-        binaryzation=-1,
-        median_blur=-1,
-        gaussian_blur=-1,
-        equalize_hist=False,
-        laplacian=False,
-        rotate=15,
-        warp_perspective=True,
-        sp_noise=0.1,
+        binaryzation=150,
+        sp_noise=0.05,
     ).astype(np.float32)
     # im = im.swapaxes(0, 1)
-    im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+    # im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
     cv_img = cv2.imencode('.png', im)[1]
     img_bytes = bytes(bytearray(cv_img))
-    with open(r"C:\Users\kerlomz\Desktop\New folder (6)\1.jpg", "wb") as f:
+    with open(r"1.jpg", "wb") as f:
         f.write(img_bytes)

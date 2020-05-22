@@ -14,6 +14,7 @@ from tkinter import filedialog
 from constants import *
 from config import ModelConfig, OUTPUT_SHAPE1_MAP, NETWORK_MAP, DataAugmentationEntity, PretreatmentEntity
 from make_dataset import DataSets
+from predict_testing import Predict
 from trains import Trains
 from category import category_extract, SIMPLE_CATEGORY_MODEL
 from gui.utils import LayoutGUI
@@ -24,10 +25,11 @@ from gui.pretreatment import PretreatmentDialog
 class Wizard:
 
     job: threading.Thread
-    current_task: Trains
+    current_task: Trains = None
     is_task_running: bool = False
     data_augmentation_entity = DataAugmentationEntity()
     pretreatment_entity = PretreatmentEntity()
+    extract_regex = ".*?(?=_)"
 
     def __init__(self, parent: tk.Tk):
         self.layout = {
@@ -210,7 +212,7 @@ class Wizard:
 
         # 图像通道 - 下拉框
         self.comb_channel = ttk.Combobox(self.parent, values=(3, 1), state='readonly')
-        self.comb_channel.current(0)
+        self.comb_channel.current(1)
         self.layout_utils.next_to_widget(
             src=self.comb_channel,
             target=self.channel_text,
@@ -252,7 +254,7 @@ class Wizard:
 
         # 循环层 - 下拉框
         self.comb_recurrent = ttk.Combobox(self.parent, values=[_.name for _ in RecurrentNetwork], state='readonly')
-        self.comb_recurrent.current(0)
+        self.comb_recurrent.current(1)
         self.layout_utils.next_to_widget(
             src=self.comb_recurrent,
             target=self.neu_recurrent_text,
@@ -295,7 +297,7 @@ class Wizard:
 
         # 损失函数 - 下拉框
         self.comb_loss = ttk.Combobox(self.parent, values=[_.name for _ in LossFunction], state='readonly')
-        self.comb_loss.current(0)
+        self.comb_loss.current(1)
         self.layout_utils.next_to_widget(
             src=self.comb_loss,
             target=self.loss_func_text,
@@ -555,8 +557,6 @@ class Wizard:
             tiny_space=True
         )
 
-
-
         # ============================= Group 5 =====================================
         self.label_frame_project = ttk.Labelframe(self.parent, text='Project Configuration')
         self.layout_utils.below_widget(
@@ -785,7 +785,7 @@ class Wizard:
             tiny_space=True
         )
 
-        # 打包训练集 - 按钮
+        # 清除训练记录 - 按钮
         self.btn_reset_history = ttk.Button(
             self.parent, text='Reset History', command=lambda: self.reset_history()
         )
@@ -793,6 +793,18 @@ class Wizard:
             src=self.btn_reset_history,
             target=self.btn_make_dataset,
             width=120,
+            height=24,
+            tiny_space=True
+        )
+
+        # 预测 - 按钮
+        self.btn_testing = ttk.Button(
+            self.parent, text='Testing', command=lambda: self.testing_model()
+        )
+        self.layout_utils.before_widget(
+            src=self.btn_testing,
+            target=self.btn_reset_history,
+            width=80,
             height=24,
             tiny_space=True
         )
@@ -891,6 +903,7 @@ class Wizard:
             return
 
         self.attach_dataset_val.set(filename)
+        self.sample_map[DatasetType.Directory][RunMode.Trains].insert(tk.END, filename)
         self.button_state(self.btn_attach_dataset, tk.DISABLED)
 
         for mode in [RunMode.Trains, RunMode.Validation]:
@@ -933,7 +946,7 @@ class Wizard:
             shutil.rmtree(project_path)
         except Exception as e:
             messagebox.showerror(
-                "Error!", json.dumps(e.args)
+                "Error!", json.dumps(e.args, ensure_ascii=False)
             )
         messagebox.showinfo(
             "Error!", "Delete successful!"
@@ -956,11 +969,19 @@ class Wizard:
             shutil.rmtree(project_history_path)
         except Exception as e:
             messagebox.showerror(
-                "Error!", json.dumps(e.args)
+                "Error!", json.dumps(e.args, ensure_ascii=False)
             )
         messagebox.showinfo(
             "Error!", "Delete history successful!"
         )
+
+    def testing_model(self):
+        filename = filedialog.askdirectory()
+        if not filename:
+            return
+        filename = filename.replace("\\", "/")
+        predict = Predict(project_name=self.current_project)
+        predict.testing(image_dir=filename, limit=self.validation_batch_size)
 
     def clear_dataset(self):
         if not self.current_project:
@@ -980,7 +1001,7 @@ class Wizard:
             self.dataset_validation_listbox.delete(1, tk.END)
         except Exception as e:
             messagebox.showerror(
-                "Error!", json.dumps(e.args)
+                "Error!", json.dumps(e.args, ensure_ascii=False)
             )
         messagebox.showinfo(
             "Error!", "Clear dataset successful!"
@@ -1021,6 +1042,8 @@ class Wizard:
         self.units_num_spin.set(model_conf.units_num)
         self.comb_loss.set(model_conf.loss_func_param)
 
+        self.extract_regex = model_conf.extract_regex
+
         if isinstance(model_conf.category_param, list):
             self.category_entry['state'] = tk.NORMAL
             self.comb_category.set('CUSTOMIZED')
@@ -1048,6 +1071,8 @@ class Wizard:
         self.data_augmentation_entity.sp_noise = model_conf.da_sp_noise
         self.data_augmentation_entity.brightness = model_conf.da_brightness
         self.data_augmentation_entity.hue = model_conf.da_hue
+        self.data_augmentation_entity.saturation = model_conf.da_saturation
+        self.data_augmentation_entity.gamma = model_conf.da_gamma
         self.data_augmentation_entity.channel_swap = model_conf.da_channel_swap
         self.data_augmentation_entity.random_blank = model_conf.da_random_blank
         self.data_augmentation_entity.random_transition = model_conf.da_random_transition
@@ -1066,10 +1091,10 @@ class Wizard:
 
     @property
     def validation_batch_size(self):
-        if self.dataset_validation_listbox.size() > 1:
-            return self.validation_batch_size_val.get()
-        else:
-            return min(self.validation_batch_size_val.get(), self.validation_num_val.get())
+        # if self.dataset_validation_listbox.size() > 1:
+        return self.validation_batch_size_val.get()
+        # else:
+        #     return min(self.validation_batch_size_val.get(), self.validation_num_val.get())
 
     @property
     def device_usage(self):
@@ -1099,11 +1124,12 @@ class Wizard:
             ImageWidth=self.image_width,
             ImageHeight=self.image_height,
             MaxLabelNum=self.label_num_spin.get(),
+            AutoPadding=True,
             ReplaceTransparent=False,
             HorizontalStitching=False,
             OutputSplit='',
             LabelFrom=LabelFrom.FileName.value,
-            ExtractRegex='.*?(?=_)',
+            ExtractRegex=self.extract_regex,
             LabelSplit='',
             DatasetTrainsPath=self.dataset_value(
                 dataset_type=DatasetType.TFRecords, mode=RunMode.Trains
@@ -1270,12 +1296,14 @@ class Wizard:
             )
             return
         try:
-            self.current_task = Trains(model_conf)
+            if not self.current_task:
+                self.current_task = Trains(model_conf)
+
             self.current_task.compile_graph(0)
             status = 'Compile completed'
         except Exception as e:
             messagebox.showerror(
-                e.__class__.__name__, json.dumps(e.args)
+                e.__class__.__name__, json.dumps(e.args, ensure_ascii=False)
             )
             status = 'Compile failure'
         tk.messagebox.showinfo('Compile Status', status)
@@ -1298,7 +1326,7 @@ class Wizard:
         except Exception as e:
             traceback.print_exc()
             messagebox.showerror(
-                e.__class__.__name__, json.dumps(e.args)
+                e.__class__.__name__, json.dumps(e.args, ensure_ascii=False)
             )
             status = 'Training failure'
         self.button_state(self.btn_training, tk.NORMAL)
@@ -1349,7 +1377,7 @@ class Wizard:
 
     @property
     def project_names(self):
-        return os.listdir(self.project_root_path)
+        return [i.name for i in os.scandir(self.project_root_path) if i.is_dir()]
 
     def fetch_projects(self):
         self.comb_project_name['values'] = self.project_names
@@ -1389,6 +1417,8 @@ class Wizard:
             category_set = set(category_extract(key))
             if category <= category_set:
                 category_group[key] = len(category_set) - len(category)
+        if not category_group:
+            return None
         min_index = min(category_group.values())
         for k, v in category_group.items():
             if v == min_index:
@@ -1407,6 +1437,8 @@ class Wizard:
                 category.extend(label)
 
         category_pram = self.closest_category(category)
+        if not category_pram:
+            return
         self.comb_category.set(category_pram)
         size = PilImage.open(os.path.join(dataset_path[0], file_names[0])).size
         self.size_val.set(json.dumps(size))
@@ -1427,6 +1459,8 @@ class Wizard:
             self.category_entry['state'] = tk.DISABLED
 
     def check_resize(self):
+        if self.loss_func == 'CTC':
+            return True
         param = OUTPUT_SHAPE1_MAP[NETWORK_MAP[self.neu_cnn]]
         shape1w = math.ceil(1.0*self.resize[0]/param[0])
         shape1h = math.ceil(1.0*self.resize[1]/param[0])
