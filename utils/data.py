@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 # Author: kerlomz <kerlomz@gmail.com>
+import os
 import hashlib
 import utils
+import random
 import utils.sparse
 import tensorflow as tf
+import numpy as np
 from constants import RunMode, ModelField, DatasetType, LossFunction
 from config import ModelConfig, EXCEPT_FORMAT_MAP
 from encoder import Encoder
+from exception import exception
 
 
 class DataIterator:
     """数据集迭代类"""
-    def __init__(self, model_conf: ModelConfig, mode: RunMode):
+
+    def __init__(self, model_conf: ModelConfig, mode: RunMode, ran_captcha=None):
         """
         :param model_conf: 工程配置
         :param mode: 运行模式（区分：训练/验证）
@@ -34,6 +39,7 @@ class DataIterator:
         self._label_list = []
         self._size = 0
         self.encoder = Encoder(self.model_conf, self.mode)
+        self.ran_captcha = ran_captcha
 
     @staticmethod
     def parse_example(serial_example):
@@ -71,6 +77,8 @@ class DataIterator:
 
         min_after_dequeue = 1000
         batch = self.batch_map[self.mode]
+        if self.model_conf.da_random_captcha['Enable']:
+            batch = random.randint(int(batch / 3 * 2), batch)
 
         dataset_train = tf.data.TFRecordDataset(
             filenames=path,
@@ -100,26 +108,53 @@ class DataIterator:
         batch_labels = utils.sparse.sparse_tuple_from_sequences(label_batch)
         return batch_inputs, batch_labels
 
+    def generate_captcha(self, num) -> (list, list):
+        _images = []
+        _labels = []
+        for i in range(num):
+            try:
+                image, labels, font_type = self.ran_captcha.create()
+                _images.append(image)
+                _labels.append(''.join(labels).encode())
+            except Exception as e:
+                print(e)
+                pass
+        return _images, _labels
+
     def generate_batch_by_tfrecords(self, session):
         """根据TFRecords生成当前批次，输入为当前TensorFlow会话，输出为稀疏型X和Y"""
         # print(session.graph)
+        batch = self.batch_map[self.mode]
+
         _input, _label = session.run(self.next_element)
+        if self.model_conf.da_random_captcha['Enable']:
+            remain_batch = batch - len(_label)
+            extra_input, extra_label = self.generate_captcha(remain_batch)
+            _input = np.concatenate((_input, extra_input), axis=0)
+            _label = np.concatenate((_label, extra_label), axis=0)
+
         input_batch = []
         label_batch = []
         for index, (i1, i2) in enumerate(zip(_input, _label)):
             try:
-                label_array = self.encoder.text(i2, extracted=True)
+                label_array = self.encoder.text(i2)
                 if self.model_conf.model_field == ModelField.Image:
                     input_array = self.encoder.image(i1)
                 else:
                     input_array = self.encoder.text(i1)
 
                 if input_array is None:
-                    tf.logging.warn("{}, \nCannot identify image file labeled: {}, ignored.".format(input_array, label_array))
+                    tf.logging.warn(
+                        "{}, \nCannot identify image file labeled: {}, ignored.".format(input_array, label_array))
                     continue
 
                 if isinstance(input_array, str):
                     tf.logging.warn("{}, \nInput errors labeled: {}, ignored.".format(input_array, label_array))
+                    continue
+                if isinstance(label_array, dict):
+                    tf.logging.warn("The sample label {} contains invalid charset: {}.".format(
+                        label_array['label'], label_array['char']
+                    ))
                     continue
 
                 if input_array.shape[-1] != self.model_conf.image_channel:
@@ -137,7 +172,9 @@ class DataIterator:
                     continue
 
                 if len(label_array) > self.model_conf.max_label_num and using_cross_entropy:
-                    tf.logging.warn("The number of label[{}] exceeds the maximum number of labels, ignored.".format(i2))
+                    tf.logging.warn(
+                        "The number of label[{}] exceeds the maximum number of labels, ignored.{}".format(i2,
+                                                                                                          label_array))
                     continue
 
                 input_batch.append(input_array)
@@ -161,5 +198,4 @@ class DataIterator:
             )
 
         self.label_list = label_batch
-
         return self.to_sparse(input_batch, self.label_list)
