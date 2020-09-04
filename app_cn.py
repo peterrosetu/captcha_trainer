@@ -22,11 +22,10 @@ from gui.utils import LayoutGUI
 from gui.data_augmentation import DataAugmentationDialog
 from gui.pretreatment import PretreatmentDialog
 
-NOT_EDITABLE_MSG = "ONLY SUPPORT MODIFICATION FROM FILE"
+NOT_EDITABLE_MSG = "只支持从文件中修改"
 
 
 class Wizard:
-
     job: threading.Thread
     current_task: Trains = None
     is_task_running: bool = False
@@ -50,7 +49,7 @@ class Wizard:
         self.project_root_path = "./projects"
         if not os.path.exists(self.project_root_path):
             os.makedirs(self.project_root_path)
-        self.parent.title('Eve-DL Trainer v1({})'.format(get_version()))
+        self.parent.title('Eve-深度训练框架 v1({})'.format(get_version()))
         self.parent.resizable(width=False, height=False)
         self.window_width = 815
         self.window_height = 700
@@ -66,11 +65,13 @@ class Wizard:
 
         self.parent.bind('<Button-1>', lambda x: self.blank_click(x))
 
+        s = ttk.Style()
+        s.configure('my.TButton', font=('simsun', 10))
         # ============================= Menu 1 =====================================
-        self.menubar = tk.Menu(self.parent)
-        self.data_menu = tk.Menu(self.menubar, tearoff=False)
-        self.help_menu = tk.Menu(self.menubar, tearoff=False)
-        self.system_menu = tk.Menu(self.menubar, tearoff=False)
+        self.menubar = tk.Menu(self.parent, font=("simsun", 10))
+        self.data_menu = tk.Menu(self.menubar, tearoff=False, font=("simsun", 10))
+        self.help_menu = tk.Menu(self.menubar, tearoff=False, font=("simsun", 10))
+        self.system_menu = tk.Menu(self.menubar, tearoff=False, font=("simsun", 10))
         self.edit_var = tk.DoubleVar()
         self.label_from_var = tk.StringVar()
 
@@ -80,29 +81,29 @@ class Wizard:
         self.memory_usage_menu.add_radiobutton(label="70%", variable=self.edit_var, value=0.7)
         self.memory_usage_menu.add_radiobutton(label="80%", variable=self.edit_var, value=0.8)
 
-        self.label_from_menu = tk.Menu(self.menubar, tearoff=False)
-        self.label_from_menu.add_radiobutton(label="FileName", variable=self.label_from_var, value='FileName')
-        self.label_from_menu.add_radiobutton(label="TXT", variable=self.label_from_var, value='TXT')
+        self.label_from_menu = tk.Menu(self.menubar, tearoff=False, font=("simsun", 10))
+        self.label_from_menu.add_radiobutton(label="文件名", variable=self.label_from_var, value='FileName')
+        self.label_from_menu.add_radiobutton(label="文本", variable=self.label_from_var, value='TXT')
 
-        self.menubar.add_cascade(label="System", menu=self.system_menu)
-        self.system_menu.add_cascade(label="Memory Usage", menu=self.memory_usage_menu)
+        self.menubar.add_cascade(label="系统", menu=self.system_menu)
+        self.system_menu.add_cascade(label="显存占用率", menu=self.memory_usage_menu)
 
-        self.data_menu.add_command(label="Data Augmentation", command=lambda: self.popup_data_augmentation())
-        self.data_menu.add_command(label="Pretreatment", command=lambda: self.popup_pretreatment())
+        self.data_menu.add_command(label="数据增强", command=lambda: self.popup_data_augmentation())
+        self.data_menu.add_command(label="预处理", command=lambda: self.popup_pretreatment())
         self.data_menu.add_separator()
-        self.data_menu.add_command(label="Clear Dataset", command=lambda: self.clear_dataset())
+        self.data_menu.add_command(label="重置打包数据集", command=lambda: self.clear_dataset())
         self.data_menu.add_separator()
-        self.data_menu.add_cascade(label="Label From", menu=self.label_from_menu)
-        self.data_menu.add_command(label="Fetch Category", command=lambda: self.fetch_category())
-        self.menubar.add_cascade(label="Data", menu=self.data_menu)
+        self.data_menu.add_cascade(label="标注源", menu=self.label_from_menu)
+        self.data_menu.add_command(label="一键获取分类", command=lambda: self.fetch_category())
+        self.menubar.add_cascade(label="数据", menu=self.data_menu)
 
-        self.help_menu.add_command(label="About", command=lambda: self.popup_about())
-        self.menubar.add_cascade(label="Help", menu=self.help_menu)
+        self.help_menu.add_command(label="关于", command=lambda: self.popup_about())
+        self.menubar.add_cascade(label="帮助", menu=self.help_menu)
 
         self.parent.config(menu=self.menubar)
 
         # ============================= Group 1 =====================================
-        self.label_frame_source = ttk.Labelframe(self.parent, text='Sample Source')
+        self.label_frame_source = ttk.Labelframe(self.parent, text='样本源')
         self.label_frame_source.place(
             x=self.layout['global']['start']['x'],
             y=self.layout['global']['start']['y'],
@@ -111,7 +112,7 @@ class Wizard:
         )
 
         # 训练集源路径 - 标签
-        self.dataset_train_path_text = ttk.Label(self.parent, text='Training Path', anchor=tk.W)
+        self.dataset_train_path_text = ttk.Label(self.parent, font=("simsun", 10), text='训练集路径', anchor=tk.W)
         self.layout_utils.inside_widget(
             src=self.dataset_train_path_text,
             target=self.label_frame_source,
@@ -136,7 +137,8 @@ class Wizard:
 
         # 训练集源路径 - 按钮
         self.btn_browse_train = ttk.Button(
-            self.parent, text='Browse', command=lambda: self.browse_dataset(DatasetType.Directory, RunMode.Trains)
+            self.parent, style='my.TButton', text='浏览',
+            command=lambda: self.browse_dataset(DatasetType.Directory, RunMode.Trains)
         )
         self.layout_utils.next_to_widget(
             src=self.btn_browse_train,
@@ -149,7 +151,7 @@ class Wizard:
         # 验证集源路径 - 标签
         label_edge = self.layout_utils.object_edge_info(self.dataset_train_path_text)
         widget_edge = self.layout_utils.object_edge_info(self.source_train_path_listbox)
-        self.dataset_validation_path_text = ttk.Label(self.parent, text='Validation Path', anchor=tk.W)
+        self.dataset_validation_path_text = ttk.Label(self.parent, font=("simsun", 10), text='验证集路径', anchor=tk.W)
         self.dataset_validation_path_text.place(
             x=label_edge['x'],
             y=widget_edge['edge_y'] + self.layout['global']['space']['y'] / 2,
@@ -174,7 +176,8 @@ class Wizard:
 
         # 训练集源路径 - 按钮
         self.btn_browse_validation = ttk.Button(
-            self.parent, text='Browse', command=lambda: self.browse_dataset(DatasetType.Directory, RunMode.Validation)
+            self.parent, style='my.TButton', text='浏览',
+            command=lambda: self.browse_dataset(DatasetType.Directory, RunMode.Validation)
         )
         self.layout_utils.next_to_widget(
             src=self.btn_browse_validation,
@@ -185,7 +188,7 @@ class Wizard:
         )
 
         # ============================= Group 2 =====================================
-        self.label_frame_neu = ttk.Labelframe(self.parent, text='Neural Network')
+        self.label_frame_neu = ttk.Labelframe(self.parent, text='神经网络')
         self.layout_utils.below_widget(
             src=self.label_frame_neu,
             target=self.label_frame_source,
@@ -195,7 +198,7 @@ class Wizard:
         )
 
         # 最大标签数目 - 标签
-        self.label_num_text = ttk.Label(self.parent, text='Label Num', anchor=tk.W)
+        self.label_num_text = ttk.Label(self.parent, font=("simsun", 10), text='标签数', anchor=tk.W)
         self.layout_utils.inside_widget(
             src=self.label_num_text,
             target=self.label_frame_neu,
@@ -215,7 +218,7 @@ class Wizard:
         )
 
         # 图像通道 - 标签
-        self.channel_text = ttk.Label(self.parent, text='Channel', anchor=tk.W)
+        self.channel_text = ttk.Label(self.parent, font=("simsun", 10), text='通道', anchor=tk.W)
         self.layout_utils.next_to_widget(
             src=self.channel_text,
             target=self.label_num_spin,
@@ -236,7 +239,7 @@ class Wizard:
         )
 
         # 卷积层 - 标签
-        self.neu_cnn_text = ttk.Label(self.parent, text='CNN Layer', anchor=tk.W)
+        self.neu_cnn_text = ttk.Label(self.parent, font=("simsun", 10), text='卷积层', anchor=tk.W)
         self.layout_utils.next_to_widget(
             src=self.neu_cnn_text,
             target=self.comb_channel,
@@ -257,7 +260,7 @@ class Wizard:
         )
 
         # 循环层 - 标签
-        self.neu_recurrent_text = ttk.Label(self.parent, text='Recurrent Layer', anchor=tk.W)
+        self.neu_recurrent_text = ttk.Label(self.parent, font=("simsun", 10), text='循环层', anchor=tk.W)
         self.layout_utils.next_to_widget(
             src=self.neu_recurrent_text,
             target=self.comb_neu_cnn,
@@ -279,7 +282,7 @@ class Wizard:
         self.comb_recurrent.bind("<<ComboboxSelected>>", lambda x: self.auto_loss(x))
 
         # 循环层单元数 - 标签
-        self.units_num_text = ttk.Label(self.parent, text='UnitsNum', anchor=tk.W)
+        self.units_num_text = ttk.Label(self.parent, font=("simsun", 10), text='单元数', anchor=tk.W)
         self.layout_utils.next_to_widget(
             src=self.units_num_text,
             target=self.comb_recurrent,
@@ -300,11 +303,11 @@ class Wizard:
         )
 
         # 损失函数 - 标签
-        self.loss_func_text = ttk.Label(self.parent, text='Loss Function', anchor=tk.W)
+        self.loss_func_text = ttk.Label(self.parent, font=("simsun", 10), text='损失函数', anchor=tk.W)
         self.layout_utils.below_widget(
             src=self.loss_func_text,
             target=self.label_num_text,
-            width=85,
+            width=65,
             height=20,
             tiny_space=True
         )
@@ -321,7 +324,7 @@ class Wizard:
         )
 
         # 优化器 - 标签
-        self.optimizer_text = ttk.Label(self.parent, text='Optimizer', anchor=tk.W)
+        self.optimizer_text = ttk.Label(self.parent, font=("simsun", 10), text='优化器', anchor=tk.W)
         self.layout_utils.next_to_widget(
             src=self.optimizer_text,
             target=self.comb_loss,
@@ -342,11 +345,11 @@ class Wizard:
         )
 
         # 学习率 - 标签
-        self.learning_rate_text = ttk.Label(self.parent, text='Learning Rate', anchor=tk.W)
+        self.learning_rate_text = ttk.Label(self.parent, font=("simsun", 10), text='学习率', anchor=tk.W)
         self.layout_utils.next_to_widget(
             src=self.learning_rate_text,
             target=self.comb_optimizer,
-            width=85,
+            width=50,
             height=20,
             tiny_space=False
         )
@@ -363,11 +366,11 @@ class Wizard:
         )
 
         # Resize - 标签
-        self.resize_text = ttk.Label(self.parent, text='Resize', anchor=tk.W)
+        self.resize_text = ttk.Label(self.parent, font=("simsun", 10), text='重置尺寸', anchor=tk.W)
         self.layout_utils.next_to_widget(
             src=self.resize_text,
             target=self.learning_rate_spin,
-            width=36,
+            width=60,
             height=20,
             tiny_space=False
         )
@@ -385,11 +388,11 @@ class Wizard:
         )
 
         # Size - 标签
-        self.size_text = ttk.Label(self.parent, text='Size', anchor=tk.W)
+        self.size_text = ttk.Label(self.parent, font=("simsun", 10), text='图片尺寸', anchor=tk.W)
         self.layout_utils.next_to_widget(
             src=self.size_text,
             target=self.resize_entry,
-            width=30,
+            width=60,
             height=20,
             tiny_space=False
         )
@@ -407,11 +410,11 @@ class Wizard:
         )
 
         # 类别 - 标签
-        self.category_text = ttk.Label(self.parent, text='Category', anchor=tk.W)
+        self.category_text = ttk.Label(self.parent, font=("simsun", 10), text='分类', anchor=tk.W)
         self.layout_utils.below_widget(
             src=self.category_text,
             target=self.loss_func_text,
-            width=72,
+            width=65,
             height=20,
             tiny_space=True
         )
@@ -455,7 +458,7 @@ class Wizard:
         )
 
         # ============================= Group 3 =====================================
-        self.label_frame_train = ttk.Labelframe(self.parent, text='Training Configuration')
+        self.label_frame_train = ttk.Labelframe(self.parent, text='训练配置')
         self.layout_utils.below_widget(
             src=self.label_frame_train,
             target=self.label_frame_neu,
@@ -465,7 +468,7 @@ class Wizard:
         )
 
         # 任务完成标准 - 准确率 - 标签
-        self.end_acc_text = ttk.Label(self.parent, text='End Accuracy', anchor=tk.W)
+        self.end_acc_text = ttk.Label(self.parent, font=("simsun", 10), text='结束准确率', anchor=tk.W)
         self.layout_utils.inside_widget(
             src=self.end_acc_text,
             target=self.label_frame_train,
@@ -486,7 +489,7 @@ class Wizard:
         )
 
         # 任务完成标准 - 平均损失 - 标签
-        self.end_cost_text = ttk.Label(self.parent, text='End Cost', anchor=tk.W)
+        self.end_cost_text = ttk.Label(self.parent, font=("simsun", 10), text='结束Cost', anchor=tk.W)
         self.layout_utils.next_to_widget(
             src=self.end_cost_text,
             target=self.end_acc_entry,
@@ -508,7 +511,7 @@ class Wizard:
         )
 
         # 任务完成标准 - 循环轮次 - 标签
-        self.end_epochs_text = ttk.Label(self.parent, text='End Epochs', anchor=tk.W)
+        self.end_epochs_text = ttk.Label(self.parent, font=("simsun", 10), text='结束轮次', anchor=tk.W)
         self.layout_utils.next_to_widget(
             src=self.end_epochs_text,
             target=self.end_cost_entry,
@@ -529,7 +532,7 @@ class Wizard:
         )
 
         # 训练批次大小 - 标签
-        self.batch_size_text = ttk.Label(self.parent, text='Train BatchSize', anchor=tk.W)
+        self.batch_size_text = ttk.Label(self.parent, font=("simsun", 10), text='训练批次大小', anchor=tk.W)
         self.layout_utils.next_to_widget(
             src=self.batch_size_text,
             target=self.end_epochs_spin,
@@ -551,7 +554,7 @@ class Wizard:
         )
 
         # 验证批次大小 - 标签
-        self.validation_batch_size_text = ttk.Label(self.parent, text='Validation BatchSize', anchor=tk.W)
+        self.validation_batch_size_text = ttk.Label(self.parent, font=("simsun", 10), text='验证批次大小', anchor=tk.W)
         self.layout_utils.next_to_widget(
             src=self.validation_batch_size_text,
             target=self.batch_size_entry,
@@ -563,7 +566,8 @@ class Wizard:
         # 验证批次大小 - 输入框
         self.validation_batch_size_val = tk.IntVar()
         self.validation_batch_size_val.set(300)
-        self.validation_batch_size_entry = ttk.Entry(self.parent, textvariable=self.validation_batch_size_val, justify=tk.LEFT)
+        self.validation_batch_size_entry = ttk.Entry(self.parent, textvariable=self.validation_batch_size_val,
+                                                     justify=tk.LEFT)
         self.layout_utils.next_to_widget(
             src=self.validation_batch_size_entry,
             target=self.validation_batch_size_text,
@@ -573,7 +577,7 @@ class Wizard:
         )
 
         # ============================= Group 5 =====================================
-        self.label_frame_project = ttk.Labelframe(self.parent, text='Project Configuration')
+        self.label_frame_project = ttk.Labelframe(self.parent, text='项目配置')
         self.layout_utils.below_widget(
             src=self.label_frame_project,
             target=self.label_frame_train,
@@ -583,7 +587,7 @@ class Wizard:
         )
 
         # 项目名 - 标签
-        self.project_name_text = ttk.Label(self.parent, text='Project Name', anchor=tk.W)
+        self.project_name_text = ttk.Label(self.parent, font=("simsun", 10), text='项目名', anchor=tk.W)
         self.layout_utils.inside_widget(
             src=self.project_name_text,
             target=self.label_frame_project,
@@ -616,7 +620,7 @@ class Wizard:
 
         # 保存配置 - 按钮
         self.btn_save_conf = ttk.Button(
-            self.parent, text='Save Configuration', command=lambda: self.save_conf()
+            self.parent, style='my.TButton', text='保存配置', command=lambda: self.save_conf()
         )
         self.layout_utils.next_to_widget(
             src=self.btn_save_conf,
@@ -629,7 +633,7 @@ class Wizard:
 
         # 删除项目 - 按钮
         self.btn_delete = ttk.Button(
-            self.parent, text='Delete', command=lambda: self.delete_project()
+            self.parent, style='my.TButton', text='删除', command=lambda: self.delete_project()
         )
         self.layout_utils.next_to_widget(
             src=self.btn_delete,
@@ -641,7 +645,7 @@ class Wizard:
 
         # ============================= Group 6 =====================================
         self.label_frame_dataset = ttk.Labelframe(
-            self.parent, text='Sample Dataset'
+            self.parent, text='样本数据集',
         )
         self.layout_utils.below_widget(
             src=self.label_frame_dataset,
@@ -654,7 +658,8 @@ class Wizard:
         # 附加训练集 - 按钮
         self.btn_attach_dataset = ttk.Button(
             self.parent,
-            text='Attach Dataset',
+            style='my.TButton',
+            text='附加数据',
             command=lambda: self.attach_dataset()
         )
         self.layout_utils.inside_widget(
@@ -679,7 +684,7 @@ class Wizard:
         )
 
         # 验证集数目 - 标签
-        self.validation_num_text = ttk.Label(self.parent, text='Validation Set Num', anchor=tk.W)
+        self.validation_num_text = ttk.Label(self.parent, font=("simsun", 10), text='验证集数目', anchor=tk.W)
         self.layout_utils.next_to_widget(
             src=self.validation_num_text,
             target=self.attach_dataset_entry,
@@ -702,7 +707,7 @@ class Wizard:
         )
 
         # 训练集路径 - 标签
-        self.dataset_train_path_text = ttk.Label(self.parent, text='Training Dataset', anchor=tk.W)
+        self.dataset_train_path_text = ttk.Label(self.parent, font=("simsun", 10), text='训练集数据集', anchor=tk.W)
         self.layout_utils.below_widget(
             src=self.dataset_train_path_text,
             target=self.btn_attach_dataset,
@@ -729,7 +734,7 @@ class Wizard:
         # 验证集路径 - 标签
         label_edge = self.layout_utils.object_edge_info(self.dataset_train_path_text)
         widget_edge = self.layout_utils.object_edge_info(self.dataset_train_listbox)
-        self.dataset_validation_path_text = ttk.Label(self.parent, text='Validation Dataset', anchor=tk.W)
+        self.dataset_validation_path_text = ttk.Label(self.parent, font=("simsun", 10), text='验证集数据集', anchor=tk.W)
         self.dataset_validation_path_text.place(
             x=label_edge['x'],
             y=widget_edge['edge_y'] + self.layout['global']['space']['y'] / 2,
@@ -764,7 +769,8 @@ class Wizard:
         }
 
         # 开始训练 - 按钮
-        self.btn_training = ttk.Button(self.parent, text='Start Training', command=lambda: self.start_training())
+        self.btn_training = ttk.Button(self.parent, style='my.TButton', text='开始训练',
+                                       command=lambda: self.start_training())
         self.layout_utils.widget_from_right(
             src=self.btn_training,
             target=self.label_frame_dataset,
@@ -774,7 +780,7 @@ class Wizard:
         )
 
         # 终止训练 - 按钮
-        self.btn_stop = ttk.Button(self.parent, text='Stop', command=lambda: self.stop_training())
+        self.btn_stop = ttk.Button(self.parent, style='my.TButton', text='停止', command=lambda: self.stop_training())
         self.button_state(self.btn_stop, tk.DISABLED)
         self.layout_utils.before_widget(
             src=self.btn_stop,
@@ -785,7 +791,7 @@ class Wizard:
         )
 
         # 编译模型 - 按钮
-        self.btn_compile = ttk.Button(self.parent, text='Compile', command=lambda: self.compile())
+        self.btn_compile = ttk.Button(self.parent, style='my.TButton', text='编译', command=lambda: self.compile())
         self.layout_utils.before_widget(
             src=self.btn_compile,
             target=self.btn_stop,
@@ -795,7 +801,8 @@ class Wizard:
         )
 
         # 打包训练集 - 按钮
-        self.btn_make_dataset = ttk.Button(self.parent, text='Make Dataset', command=lambda: self.make_dataset())
+        self.btn_make_dataset = ttk.Button(self.parent, style='my.TButton', text='打包数据集',
+                                           command=lambda: self.make_dataset())
         self.layout_utils.before_widget(
             src=self.btn_make_dataset,
             target=self.btn_compile,
@@ -806,7 +813,7 @@ class Wizard:
 
         # 清除训练记录 - 按钮
         self.btn_reset_history = ttk.Button(
-            self.parent, text='Reset History', command=lambda: self.reset_history()
+            self.parent, style='my.TButton', text='清空训练记录', command=lambda: self.reset_history()
         )
         self.layout_utils.before_widget(
             src=self.btn_reset_history,
@@ -818,7 +825,7 @@ class Wizard:
 
         # 预测 - 按钮
         self.btn_testing = ttk.Button(
-            self.parent, text='Testing', command=lambda: self.testing_model()
+            self.parent, style='my.TButton', text='测试', command=lambda: self.testing_model()
         )
         self.layout_utils.before_widget(
             src=self.btn_testing,
@@ -840,7 +847,7 @@ class Wizard:
     def popup_data_augmentation(self):
         if not self.current_project:
             messagebox.showerror(
-                "Error!", "Please set the project name first."
+                "Error!", "请先配置项目名."
             )
             return
         data_augmentation = DataAugmentationDialog()
@@ -849,7 +856,7 @@ class Wizard:
     def popup_pretreatment(self):
         if not self.current_project:
             messagebox.showerror(
-                "Error!", "Please set the project name first."
+                "Error!", "请先配置项目名."
             )
             return
         pretreatment = PretreatmentDialog()
@@ -910,12 +917,12 @@ class Wizard:
     def attach_dataset(self):
         if self.is_task_running:
             messagebox.showerror(
-                "Error!", "Please terminate the current training first or wait for the training to end."
+                "Error!", "请先结束当前训练或者等待训练完成."
             )
             return
         if not self.current_project:
             messagebox.showerror(
-                "Error!", "Please set the project name first."
+                "Error!", "请先配置项目名."
             )
             return
         filename = filedialog.askdirectory()
@@ -945,7 +952,7 @@ class Wizard:
                 trains_path=filename,
                 is_add=True,
                 callback=lambda: self.button_state(self.btn_attach_dataset, tk.NORMAL),
-                msg=lambda x: tk.messagebox.showinfo('Attach Dataset Status', x)
+                msg=lambda x: tk.messagebox.showinfo('附加数据状态', x)
             )
         )
         pass
@@ -957,12 +964,12 @@ class Wizard:
     def delete_project(self):
         if not self.current_project:
             messagebox.showerror(
-                "Error!", "Please select a project to delete."
+                "Error!", "请选择一个项目删除."
             )
             return
         if self.is_task_running:
             messagebox.showerror(
-                "Error!", "Please terminate the current training first or wait for the training to end."
+                "Error!", "请先结束当前训练或者等待训练完成."
             )
             return
         project_path = "./projects/{}".format(self.current_project)
@@ -973,19 +980,19 @@ class Wizard:
                 "Error!", json.dumps(e.args, ensure_ascii=False)
             )
         messagebox.showinfo(
-            "Error!", "Delete successful!"
+            "Error!", "删除成功!"
         )
         self.comb_project_name.delete(0, tk.END)
 
     def reset_history(self):
         if not self.current_project:
             messagebox.showerror(
-                "Error!", "Please select a project first."
+                "Error!", "请先选择一个项目."
             )
             return
         if self.is_task_running:
             messagebox.showerror(
-                "Error!", "Please terminate the current training first or wait for the training to end."
+                "Error!", "请先结束当前训练或者等待训练完成."
             )
             return
         project_history_path = "./projects/{}/model".format(self.current_project)
@@ -996,7 +1003,7 @@ class Wizard:
                 "Error!", json.dumps(e.args, ensure_ascii=False)
             )
         messagebox.showinfo(
-            "Error!", "Delete history successful!"
+            "消息", "清空训练历史成功!"
         )
 
     def testing_model(self):
@@ -1010,12 +1017,12 @@ class Wizard:
     def clear_dataset(self):
         if not self.current_project:
             messagebox.showerror(
-                "Error!", "Please select a project first."
+                "Error!", "请先选择一个项目."
             )
             return
         if self.is_task_running:
             messagebox.showerror(
-                "Error!", "Please terminate the current training first or wait for the training to end."
+                "Error!", "请先结束当前训练或者等待训练完成."
             )
             return
         project_history_path = "./projects/{}/dataset".format(self.current_project)
@@ -1028,12 +1035,14 @@ class Wizard:
                 "Error!", json.dumps(e.args, ensure_ascii=False)
             )
         messagebox.showinfo(
-            "Error!", "Clear dataset successful!"
+            "消息", "清空数据集成功!"
         )
 
     @staticmethod
     def popup_about():
-        messagebox.showinfo("About", "Eve-DL Trainer CORE_VERSION({})\n\nAuthor's mailbox: kerlomz@gmail.com\n\nQQ Group: 857149419".format(get_version()))
+        messagebox.showinfo("关于",
+                            "Eve-深度训练 核心版本({})\n\n作者邮箱: kerlomz@gmail.com\n\nQQ 群: 857149419".format(
+                                get_version()))
 
     def auto_loss(self, event):
         if self.comb_recurrent.get() == 'NoRecurrent':
@@ -1140,7 +1149,7 @@ class Wizard:
     def save_conf(self):
         if not self.current_project:
             messagebox.showerror(
-                "Error!", "Please set the project name first."
+                "Error!", "请先配置项目名."
             )
             return
         model_conf = ModelConfig(
@@ -1218,12 +1227,12 @@ class Wizard:
     def make_dataset(self):
         if not self.current_project:
             messagebox.showerror(
-                "Error!", "Please set the project name first."
+                "Error!", "请先配置项目名."
             )
             return
         if self.is_task_running:
             messagebox.showerror(
-                "Error!", "Please terminate the current training first or wait for the training to end."
+                "Error!", "请先结束当前训练或者等待训练完成."
             )
             return
         self.save_conf()
@@ -1233,7 +1242,7 @@ class Wizard:
         validation_path = self.dataset_value(DatasetType.Directory, RunMode.Validation)
         if len(train_path) < 1:
             messagebox.showerror(
-                "Error!", "{} Sample set has not been added.".format(RunMode.Trains.value)
+                "错误!", "{} 样本尚未被添加.".format(RunMode.Trains.value)
             )
             self.button_state(self.btn_make_dataset, tk.NORMAL)
             return
@@ -1243,7 +1252,7 @@ class Wizard:
                 validation_path=validation_path,
                 is_add=False,
                 callback=lambda: self.button_state(self.btn_make_dataset, tk.NORMAL),
-                msg=lambda x: tk.messagebox.showinfo('Make Dataset Status', x)
+                msg=lambda x: tk.messagebox.showinfo('打包数据集状态', x)
             )
         )
 
@@ -1283,14 +1292,14 @@ class Wizard:
     def json_filter(content, item_type):
         if not content:
             messagebox.showerror(
-                "Error!", "To select a customized category, you must specify the category set manually."
+                "Error!", "您选择了自定义分类，必须手动指定分类集."
             )
             return None
         try:
             content = json.loads(content)
         except ValueError as e:
             messagebox.showerror(
-                "Error!", "Input must be of type JSON."
+                "Error!", "输入格式必须符合JSON."
             )
             return None
         content = [item_type(i) for i in content]
@@ -1301,7 +1310,7 @@ class Wizard:
         comb_selected = self.comb_category.get()
         if not comb_selected:
             messagebox.showerror(
-                "Error!", "Please select built-in category or custom category first"
+                "Error!", "请选择内置分类或自定义分类"
             )
             return None
         if comb_selected == 'CUSTOMIZED':
@@ -1322,18 +1331,18 @@ class Wizard:
     def compile_task(self):
         if not self.current_project:
             messagebox.showerror(
-                "Error!", "Please set the project name first."
+                "Error!", "请先配置项目名."
             )
             return
         model_conf = ModelConfig(project_name=self.current_project)
         if not os.path.exists(model_conf.model_root_path):
             messagebox.showerror(
-                "Error", "Model storage folder does not exist."
+                "Error", "模型存储路径不存在."
             )
             return
         if len(os.listdir(model_conf.model_root_path)) < 3:
             messagebox.showerror(
-                "Error", "There is no training model record, please train before compiling."
+                "Error", "当前无训练记录，请先训练再编译."
             )
             return
         try:
@@ -1341,13 +1350,13 @@ class Wizard:
                 self.current_task = Trains(model_conf)
 
             self.current_task.compile_graph(0)
-            status = 'Compile completed'
+            status = '编译完成'
         except Exception as e:
             messagebox.showerror(
                 e.__class__.__name__, json.dumps(e.args, ensure_ascii=False)
             )
-            status = 'Compile failure'
-        tk.messagebox.showinfo('Compile Status', status)
+            status = '编译失败'
+        tk.messagebox.showinfo('编译状态', status)
 
     def compile(self):
         self.job = self.threading_exec(
@@ -1363,18 +1372,18 @@ class Wizard:
             self.button_state(self.btn_stop, tk.NORMAL)
             self.is_task_running = True
             self.current_task.train_process()
-            status = 'Training completed'
+            status = '训练完成'
         except Exception as e:
             traceback.print_exc()
             messagebox.showerror(
                 e.__class__.__name__, json.dumps(e.args, ensure_ascii=False)
             )
-            status = 'Training failure'
+            status = '训练失败'
         self.button_state(self.btn_training, tk.NORMAL)
         self.button_state(self.btn_stop, tk.DISABLED)
         self.comb_project_name['state'] = tk.NORMAL
         self.is_task_running = False
-        tk.messagebox.showinfo('Training Status', status)
+        tk.messagebox.showinfo('训练状态', status)
 
     @staticmethod
     def check_dataset(model_conf):
@@ -1382,19 +1391,19 @@ class Wizard:
         validation_path = model_conf.validation_path[DatasetType.TFRecords]
         if not trains_path or not validation_path:
             messagebox.showerror(
-                "Error!", "Training set or validation set not defined."
+                "Error!", "训练集或验证集未定义."
             )
             return False
         for tp in trains_path:
             if not os.path.exists(tp):
                 messagebox.showerror(
-                    "Error!", "Training set path does not exist, please make dataset first"
+                    "Error!", "训练集集路径不存在，请先打包样本."
                 )
                 return False
         for vp in validation_path:
             if not os.path.exists(vp):
                 messagebox.showerror(
-                    "Error!", "Validation set path does not exist, please make dataset first"
+                    "Error!", "验证集路径不存在，请先打包样本"
                 )
                 return False
         return True
@@ -1404,7 +1413,7 @@ class Wizard:
             return
         if not self.current_project:
             messagebox.showerror(
-                "Error!", "Please set the project name first."
+                "Error!", "请先配置项目名."
             )
             return
         model_conf = self.save_conf()
@@ -1428,7 +1437,7 @@ class Wizard:
     def browse_dataset(self, dataset_type: DatasetType, mode: RunMode):
         if not self.current_project:
             messagebox.showerror(
-                "Error!", "Please define the project name first."
+                "Error!", "请先配置项目名."
             )
             return
         filename = filedialog.askdirectory()
@@ -1470,7 +1479,7 @@ class Wizard:
     def fetch_category(self):
         if self.model_conf.label_from == LabelFrom.TXT or self.label_from_var.get() == LabelFrom.TXT.value:
             messagebox.showerror(
-                "Error!", "The Label From is currently not supported."
+                "Error!", "当前标签源不支持."
             )
             return
         self.save_conf()
@@ -1529,13 +1538,13 @@ class Wizard:
         if self.loss_func == 'CTC':
             return True
         param = OUTPUT_SHAPE1_MAP[NETWORK_MAP[self.neu_cnn]]
-        shape1w = math.ceil(1.0*self.resize[0]/param[0])
-        shape1h = math.ceil(1.0*self.resize[1]/param[0])
+        shape1w = math.ceil(1.0 * self.resize[0] / param[0])
+        shape1h = math.ceil(1.0 * self.resize[1] / param[0])
         input_s1 = shape1w * shape1h * param[1]
         label_num = int(self.label_num_spin.get())
         if input_s1 % label_num != 0:
             messagebox.showerror(
-                "Error!", "Shape[1] = {} must divide the label_num = {}.".format(input_s1, label_num)
+                "Error!", "Shape[1] = {} 必须被 label_num = {} 整除.".format(input_s1, label_num)
             )
             return False
         return True
@@ -1554,4 +1563,3 @@ if __name__ == '__main__':
     root = tk.Tk()
     app = Wizard(root)
     root.mainloop()
-

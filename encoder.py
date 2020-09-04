@@ -13,6 +13,7 @@ from constants import RunMode
 from config import ModelConfig, LabelFrom, LossFunction
 from category import encode_maps, FULL_ANGLE_MAP
 from pretreatment import preprocessing
+from pretreatment import preprocessing_by_func
 from tools.gif_frames import concat_frames, blend_frame
 
 
@@ -39,7 +40,9 @@ class Encoder(object):
         except OSError as e:
             return "{} - {}".format(e, path_or_bytes)
 
-        if pil_image.mode == 'P':
+        gif_handle = self.model_conf.pre_concat_frames != -1 or self.model_conf.pre_blend_frames != -1
+
+        if pil_image.mode == 'P' and not gif_handle:
             pil_image = pil_image.convert('RGB')
 
         rgb = pil_image.split()
@@ -49,8 +52,6 @@ class Encoder(object):
             )
 
         size = pil_image.size
-
-        gif_handle = self.model_conf.pre_concat_frames != -1 or self.model_conf.pre_blend_frames != -1
 
         if len(rgb) > 3 and self.model_conf.pre_replace_transparent and not gif_handle:
             background = PIL.Image.new('RGBA', pil_image.size, (255, 255, 255))
@@ -68,6 +69,11 @@ class Encoder(object):
         if isinstance(im, list):
             return None
 
+        im = preprocessing_by_func(
+            exec_map=self.model_conf.pre_exec_map,
+            src_arr=im
+        )
+
         if self.model_conf.image_channel == 1 and len(im.shape) == 3:
             if self.mode == RunMode.Trains:
                 im = cv2.cvtColor(im, cv2.COLOR_RGB2GRAY if bool(random.getrandbits(1)) else cv2.COLOR_BGR2GRAY)
@@ -78,6 +84,11 @@ class Encoder(object):
             image=im,
             binaryzation=self.model_conf.pre_binaryzation,
         )
+
+        if self.model_conf.pre_horizontal_stitching:
+            up_slice = im[0: int(size[1] / 2), 0: size[0]]
+            down_slice = im[int(size[1] / 2): size[1], 0: size[0]]
+            im = np.concatenate((up_slice, down_slice), axis=1)
 
         if self.mode == RunMode.Trains and bool(random.getrandbits(1)):
             im = preprocessing(

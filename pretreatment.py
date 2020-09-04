@@ -3,7 +3,9 @@
 # Author: kerlomz <kerlomz@gmail.com>
 import cv2
 import random
+import PIL
 import numpy as np
+from math import floor, ceil
 
 
 class Pretreatment(object):
@@ -75,9 +77,9 @@ class Pretreatment(object):
 
         if bool(random.getrandbits(1)):
             angle = random.choice([
-                    -10, -20, -30, -45, -50, -60, -75, -90, -95, -100,
-                    10, 20, 30, 45, 50, 60, 75, 90, 95, 100
-                ])
+                -10, -20, -30, -45, -50, -60, -75, -90, -95, -100,
+                10, 20, 30, 45, 50, 60, 75, 90, 95, 100
+            ])
         else:
             angle = -random.randint(-value, value)
 
@@ -97,22 +99,22 @@ class Pretreatment(object):
             self.origin = _rotate
         return _rotate
 
-    def warp_perspective(self, modify=False) -> np.ndarray:
-        size = self.origin.shape
-        height, width = size[0], size[1]
-        size0 = random.randint(3, 9)
-        size1 = random.randint(25, 30)
-        size2 = random.randint(23, 27)
-        size3 = random.randint(33, 37)
-        pts1 = np.float32([[0, 0], [0, size1], [size1, size1], [size1, 0]])
-        pts2 = np.float32([[size0, 0], [-size0, size1], [size2, size1], [size3, 0]])
-        is_random = bool(random.getrandbits(1))
-        param = (pts2, pts1) if is_random else (pts1, pts2)
-        warp_mat = cv2.getPerspectiveTransform(*param)
-        dst = cv2.warpPerspective(self.origin, warp_mat, (width, height))
-        if modify:
-            self.origin = dst
-        return dst
+    # def warp_perspective(self, modify=False) -> np.ndarray:
+    #     size = self.origin.shape
+    #     height, width = size[0], size[1]
+    #     size0 = random.randint(3, 9)
+    #     size1 = random.randint(25, 30)
+    #     size2 = random.randint(23, 27)
+    #     size3 = random.randint(33, 37)
+    #     pts1 = np.float32([[0, 0], [0, size1], [size1, size1], [size1, 0]])
+    #     pts2 = np.float32([[size0, 0], [-size0, size1], [size2, size1], [size3, 0]])
+    #     is_random = bool(random.getrandbits(1))
+    #     param = (pts2, pts1) if is_random else (pts1, pts2)
+    #     warp_mat = cv2.getPerspectiveTransform(*param)
+    #     dst = cv2.warpPerspective(self.origin, warp_mat, (width, height))
+    #     if modify:
+    #         self.origin = dst
+    #     return dst
 
     def sp_noise(self, prob, modify=False):
         size = self.origin.shape
@@ -205,14 +207,115 @@ class Pretreatment(object):
     def random_transition(self, max_int, modify=False):
         size = self.origin.shape
         height, width = size[0], size[1]
-        corp_range_w = random.randint(0, max_int)
-        corp_range_h = random.randint(0, max_int)
-        m = np.float32([[1, 0, corp_range_w], [0, 1, corp_range_h]])
+        crop_range_w = random.randint(0, max_int)
+        crop_range_w = crop_range_w if bool(random.getrandbits(1)) else -crop_range_w
+        crop_range_h = random.randint(0, max_int)
+        crop_range_h = crop_range_h if bool(random.getrandbits(1)) else -crop_range_h
+        m = np.float32([[1, 0, crop_range_w], [0, 1, crop_range_h]])
         random_color = random.randint(240, 255)
         random_color = (random_color, random_color, random_color) if bool(random.getrandbits(1)) else (0, 0, 0)
         output = cv2.warpAffine(self.origin, m, (width, height), borderValue=random_color)
         if modify:
             self.origin = output
+        return output
+
+    def warp_perspective(self, modify=False):
+
+        tmp = PIL.Image.fromarray(self.origin)
+        w, h = tmp.size
+
+        magnitude = random.randint(2, 4)
+        grid_width = random.randint(5, 10)
+        grid_height = random.randint(3, 7)
+
+        horizontal_tiles = grid_width
+        vertical_tiles = grid_height
+
+        width_of_square = int(floor(w / float(horizontal_tiles)))
+        height_of_square = int(floor(h / float(vertical_tiles)))
+
+        width_of_last_square = w - (width_of_square * (horizontal_tiles - 1))
+        height_of_last_square = h - (height_of_square * (vertical_tiles - 1))
+
+        dimensions = []
+
+        for vertical_tile in range(vertical_tiles):
+            for horizontal_tile in range(horizontal_tiles):
+                if vertical_tile == (vertical_tiles - 1) and horizontal_tile == (horizontal_tiles - 1):
+                    dimensions.append([horizontal_tile * width_of_square,
+                                       vertical_tile * height_of_square,
+                                       width_of_last_square + (horizontal_tile * width_of_square),
+                                       height_of_last_square + (height_of_square * vertical_tile)])
+                elif vertical_tile == (vertical_tiles - 1):
+                    dimensions.append([horizontal_tile * width_of_square,
+                                       vertical_tile * height_of_square,
+                                       width_of_square + (horizontal_tile * width_of_square),
+                                       height_of_last_square + (height_of_square * vertical_tile)])
+                elif horizontal_tile == (horizontal_tiles - 1):
+                    dimensions.append([horizontal_tile * width_of_square,
+                                       vertical_tile * height_of_square,
+                                       width_of_last_square + (horizontal_tile * width_of_square),
+                                       height_of_square + (height_of_square * vertical_tile)])
+                else:
+                    dimensions.append([horizontal_tile * width_of_square,
+                                       vertical_tile * height_of_square,
+                                       width_of_square + (horizontal_tile * width_of_square),
+                                       height_of_square + (height_of_square * vertical_tile)])
+
+        # For loop that generates polygons could be rewritten, but maybe harder to read?
+        # polygons = [x1,y1, x1,y2, x2,y2, x2,y1 for x1,y1, x2,y2 in dimensions]
+
+        # last_column = [(horizontal_tiles - 1) + horizontal_tiles * i for i in range(vertical_tiles)]
+        last_column = []
+        for i in range(vertical_tiles):
+            last_column.append((horizontal_tiles - 1) + horizontal_tiles * i)
+
+        last_row = range((horizontal_tiles * vertical_tiles) - horizontal_tiles, horizontal_tiles * vertical_tiles)
+
+        polygons = []
+        for x1, y1, x2, y2 in dimensions:
+            polygons.append([x1, y1, x1, y2, x2, y2, x2, y1])
+
+        polygon_indices = []
+        for i in range((vertical_tiles * horizontal_tiles) - 1):
+            if i not in last_row and i not in last_column:
+                polygon_indices.append([i, i + 1, i + horizontal_tiles, i + 1 + horizontal_tiles])
+
+        for a, b, c, d in polygon_indices:
+            dx = random.randint(-magnitude, magnitude)
+            dy = random.randint(-magnitude, magnitude)
+
+            x1, y1, x2, y2, x3, y3, x4, y4 = polygons[a]
+            polygons[a] = [x1, y1,
+                           x2, y2,
+                           x3 + dx, y3 + dy,
+                           x4, y4]
+
+            x1, y1, x2, y2, x3, y3, x4, y4 = polygons[b]
+            polygons[b] = [x1, y1,
+                           x2 + dx, y2 + dy,
+                           x3, y3,
+                           x4, y4]
+
+            x1, y1, x2, y2, x3, y3, x4, y4 = polygons[c]
+            polygons[c] = [x1, y1,
+                           x2, y2,
+                           x3, y3,
+                           x4 + dx, y4 + dy]
+
+            x1, y1, x2, y2, x3, y3, x4, y4 = polygons[d]
+            polygons[d] = [x1 + dx, y1 + dy,
+                           x2, y2,
+                           x3, y3,
+                           x4, y4]
+
+        generated_mesh = []
+        for i in range(len(dimensions)):
+            generated_mesh.append([dimensions[i], polygons[i]])
+
+        output = tmp.transform(tmp.size, PIL.Image.MESH, generated_mesh, resample=PIL.Image.BICUBIC)
+        if modify:
+            self.origin = np.asarray(output)
         return output
 
 
@@ -248,30 +351,31 @@ def preprocessing(
     :param warp_perspective: bool, 透视变形
     :param sp_noise: 浮点, 椒盐噪声
     :param rotate: 数字, 旋转
+    :param corp: 裁剪
     :return:
     """
     pretreatment = Pretreatment(image)
-    if rotate > 0 and bool(random.getrandbits(1)):
+    if rotate > 0:
         pretreatment.rotate(rotate, True)
-    if random_transition != -1 and bool(random.getrandbits(1)):
+    if random_transition != -1:
         pretreatment.random_transition(5, True)
-    if 0 < sp_noise < 1 and bool(random.getrandbits(1)):
+    if 0 < sp_noise < 1:
         pretreatment.sp_noise(sp_noise, True)
-    if binaryzation != -1 and bool(random.getrandbits(1)):
+    if binaryzation != -1:
         pretreatment.binarization(binaryzation, True)
-    if median_blur != -1 and bool(random.getrandbits(1)):
+    if median_blur != -1:
         pretreatment.median_blur(median_blur, True)
-    if gaussian_blur != -1 and bool(random.getrandbits(1)):
+    if gaussian_blur != -1:
         pretreatment.gaussian_blur(gaussian_blur, True)
     if equalize_hist and bool(random.getrandbits(1)):
         pretreatment.equalize_hist(True, True)
-    if laplacian and bool(random.getrandbits(1)):
+    if laplacian:
         pretreatment.laplacian(True, True)
-    if warp_perspective and bool(random.getrandbits(1)):
+    if warp_perspective:
         pretreatment.warp_perspective(True)
     if random_brightness and bool(random.getrandbits(1)):
         pretreatment.random_brightness(True)
-    if random_blank != -1 and bool(random.getrandbits(1)):
+    if random_blank != -1:
         pretreatment.random_blank(2, True)
     if random_gamma and bool(random.getrandbits(1)):
         pretreatment.random_gamma(True)
@@ -284,24 +388,66 @@ def preprocessing(
     return pretreatment.get()
 
 
+def preprocessing_by_func(exec_map: dict, src_arr, key=None):
+    if not exec_map:
+        return src_arr
+    target_arr = cv2.cvtColor(src_arr, cv2.COLOR_RGB2BGR)
+    if not key:
+        key = random.choice(list(exec_map.keys()))
+    for sentence in exec_map.get(key):
+        if sentence.startswith("@@"):
+            target_arr = eval(sentence[2:])
+        elif sentence.startswith("$$"):
+            exec(sentence[2:])
+    return cv2.cvtColor(target_arr, cv2.COLOR_BGR2RGB)
+
+
 if __name__ == '__main__':
     import io
     import os
     import PIL.Image
     import random
-    root_dir = r"H:\img"
+
+    root_dir = r"H:\TrainSet\九宫格\极验\切图"
     name = random.choice(os.listdir(root_dir))
     # name = "3956_b8cee4da-3530-11ea-9778-c2f9192435fa.png"
     path = os.path.join(root_dir, name)
+    print(path)
     with open(path, "rb") as f:
         path_or_bytes = f.read()
     path_or_stream = io.BytesIO(path_or_bytes)
-    pil_image = PIL.Image.open(path_or_stream).convert("L")
+    pil_image = PIL.Image.open(path_or_stream).convert("RGB")
     im = np.array(pil_image)
+    # im = preprocessing_by_func(exec_map={
+    #     "black": [
+    #         "$$target_arr[:, :, 2] = 255 - target_arr[:, :, 2]",
+    #     ],
+    #     "red": [],
+    #     "yellow": [
+    #         "$$target_arr[:, :, 2] = 255 - target_arr[:, :, 2]",
+    #         "@@target_arr[:, :, (0, 2, 0)]",
+    #         "$$target_arr[:, :, 2] = 255 - target_arr[:, :, 2]",
+    #
+    #         # "$$target_arr[:, :, 2] = 255 - target_arr[:, :, 2]",
+    #         # "@@target_arr[:, :, (0, 2, 1)]",
+    #
+    #         # "$$target_arr[:, :, 1] = 255 - target_arr[:, :, 1]",
+    #         # "@@target_arr[:, :, (2, 1, 0)]",
+    #         # "@@target_arr[:, :, (1, 2, 0)]",
+    #     ],
+    #     "blue": [
+    #         "@@target_arr[:, :, (1, 2, 0)]",
+    #     ]
+    # },
+    #     src_arr=im,
+    #     key="blue"
+    # )
     im = preprocessing(
         image=im,
-        binaryzation=150,
-        sp_noise=0.05,
+        # binaryzation=150,
+        # warp_perspective=True,
+        random_transition=True,
+        # rotate=90
     ).astype(np.float32)
     # im = im.swapaxes(0, 1)
     # im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
