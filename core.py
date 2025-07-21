@@ -18,6 +18,8 @@ from decoder import *
 from fc import *
 
 import tensorflow as tf
+tf.compat.v1.disable_v2_behavior()
+tf.compat.v1.disable_eager_execution()
 
 
 class NeuralNetwork(object):
@@ -66,7 +68,10 @@ class NeuralNetwork(object):
     def _build_model(self):
 
         """选择采用哪种卷积网络"""
-        if self.network == CNNNetwork.CNN5:
+        if self.network == CNNNetwork.CNN3:
+            x = CNN3(model_conf=self.model_conf, inputs=self.inputs, utils=self.utils).build()
+
+        elif self.network == CNNNetwork.CNN5:
             x = CNN5(model_conf=self.model_conf, inputs=self.inputs, utils=self.utils).build()
 
         elif self.network == CNNNetwork.CNNX:
@@ -92,7 +97,7 @@ class NeuralNetwork(object):
         # time_major = True: [max_time_step, batch_size, num_classes]
         tf.compat.v1.logging.info("CNN Output: {}".format(x.get_shape()))
 
-        self.seq_len = tf.fill([tf.shape(x)[0]], tf.shape(x)[1], name="seq_len")
+        self.seq_len = tf.compat.v1.fill([tf.shape(x)[0]], tf.shape(x)[1], name="seq_len")
 
         if self.recurrent == RecurrentNetwork.NoRecurrent:
             self.recurrent_network_builder = None
@@ -123,20 +128,21 @@ class NeuralNetwork(object):
                 self.outputs = FullConnectedRNN(model_conf=self.model_conf, outputs=logits).build()
             elif self.model_conf.loss_func == LossFunction.CrossEntropy:
                 self.outputs = FullConnectedCNN(model_conf=self.model_conf, outputs=logits).build()
-            return self.outputs
+        return self.outputs
 
     @property
     def decay_steps(self):
         if not self.dataset_size:
             return 10000
-        epoch_step = int(self.dataset_size / self.model_conf.batch_size)
-        return int(epoch_step / 4)
+        return 10000
+        # epoch_step = int(self.dataset_size / self.model_conf.batch_size)
+        # return int(epoch_step / 4)
 
     def _build_train_op(self):
         """构建训练操作符"""
 
         # 步数
-        self.global_step = tf.train.get_or_create_global_step()
+        self.global_step = tf.compat.v1.train.get_or_create_global_step()
 
         # Loss函数
         if self.model_conf.loss_func == LossFunction.CTC:
@@ -174,7 +180,7 @@ class NeuralNetwork(object):
                 amsbound=True
             )
         elif self.model_conf.neu_optimizer == Optimizer.Adam:
-            self.optimizer = tf.train.AdamOptimizer(
+            self.optimizer = tf.compat.v1.train.AdamOptimizer(
                 learning_rate=self.lrn_rate
             )
         elif self.model_conf.neu_optimizer == Optimizer.RAdam:
@@ -184,26 +190,26 @@ class NeuralNetwork(object):
                 min_lr=1e-6
             )
         elif self.model_conf.neu_optimizer == Optimizer.Momentum:
-            self.optimizer = tf.train.MomentumOptimizer(
+            self.optimizer = tf.compat.v1.train.MomentumOptimizer(
                 learning_rate=self.lrn_rate,
                 use_nesterov=True,
                 momentum=0.9,
             )
         elif self.model_conf.neu_optimizer == Optimizer.SGD:
-            self.optimizer = tf.train.GradientDescentOptimizer(
+            self.optimizer = tf.compat.v1.train.GradientDescentOptimizer(
                 learning_rate=self.lrn_rate,
             )
         elif self.model_conf.neu_optimizer == Optimizer.AdaGrad:
-            self.optimizer = tf.train.AdagradOptimizer(
+            self.optimizer = tf.compat.v1.train.AdagradOptimizer(
                 learning_rate=self.lrn_rate,
             )
         elif self.model_conf.neu_optimizer == Optimizer.RMSProp:
-            self.optimizer = tf.train.RMSPropOptimizer(
+            self.optimizer = tf.compat.v1.train.RMSPropOptimizer(
                 learning_rate=self.lrn_rate,
             )
 
         # BN 操作符更新(moving_mean, moving_variance)
-        update_ops = tf.compat.v1.get_collection(tf.GraphKeys.UPDATE_OPS)
+        update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
 
         # 将 train_op 和 update_ops 融合
         with tf.control_dependencies(update_ops):

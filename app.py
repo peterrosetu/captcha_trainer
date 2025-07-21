@@ -74,18 +74,18 @@ class Wizard:
         self.edit_var = tk.DoubleVar()
         self.label_from_var = tk.StringVar()
 
-        self.memory_usage_menu = tk.Menu(self.menubar, tearoff=False)
-        self.memory_usage_menu.add_radiobutton(label="50%", variable=self.edit_var, value=0.5)
-        self.memory_usage_menu.add_radiobutton(label="60%", variable=self.edit_var, value=0.6)
-        self.memory_usage_menu.add_radiobutton(label="70%", variable=self.edit_var, value=0.7)
-        self.memory_usage_menu.add_radiobutton(label="80%", variable=self.edit_var, value=0.8)
+        # self.memory_usage_menu = tk.Menu(self.menubar, tearoff=False)
+        # self.memory_usage_menu.add_radiobutton(label="50%", variable=self.edit_var, value=0.5)
+        # self.memory_usage_menu.add_radiobutton(label="60%", variable=self.edit_var, value=0.6)
+        # self.memory_usage_menu.add_radiobutton(label="70%", variable=self.edit_var, value=0.7)
+        # self.memory_usage_menu.add_radiobutton(label="80%", variable=self.edit_var, value=0.8)
 
         self.label_from_menu = tk.Menu(self.menubar, tearoff=False)
         self.label_from_menu.add_radiobutton(label="FileName", variable=self.label_from_var, value='FileName')
         self.label_from_menu.add_radiobutton(label="TXT", variable=self.label_from_var, value='TXT')
 
         self.menubar.add_cascade(label="System", menu=self.system_menu)
-        self.system_menu.add_cascade(label="Memory Usage", menu=self.memory_usage_menu)
+        # self.system_menu.add_cascade(label="Memory Usage", menu=self.memory_usage_menu)
 
         self.data_menu.add_command(label="Data Augmentation", command=lambda: self.popup_data_augmentation())
         self.data_menu.add_command(label="Pretreatment", command=lambda: self.popup_pretreatment())
@@ -427,10 +427,11 @@ class Wizard:
             'ALPHABET_UPPER',
             'ALPHABET',
             'ARITHMETIC',
+            'ARITHMETIC_MIX_ALPHA_LOWER',
             'FLOAT',
             'CHS_3500',
             'ALPHANUMERIC_CHS_3500_LOWER',
-            'DOCUMENT_OCR'
+            'DOCUMENT_OCR',
         ), state='readonly')
         self.comb_category.current(1)
         self.comb_category.bind("<<ComboboxSelected>>", lambda x: self.comb_category_callback(x))
@@ -1072,7 +1073,7 @@ class Wizard:
         self.label_from_var.set(model_conf.label_from.value)
 
         self.comb_optimizer.set(model_conf.neu_optimizer_param)
-        self.learning_rate_spin.set(model_conf.trains_learning_rate)
+        self.learning_rate_spin.set(float(model_conf.trains_learning_rate))
         self.end_acc_val.set(model_conf.trains_end_acc)
         self.end_cost_val.set(model_conf.trains_end_cost)
         self.end_epochs_spin.set(model_conf.trains_end_epochs)
@@ -1468,12 +1469,12 @@ class Wizard:
                 return k
 
     def fetch_category(self):
+        self.model_conf = self.save_conf()
         if self.model_conf.label_from == LabelFrom.TXT or self.label_from_var.get() == LabelFrom.TXT.value:
             messagebox.showerror(
                 "Error!", "The Label From is currently not supported."
             )
             return
-        self.save_conf()
         category_list = fetch_category_list(self.model_conf, is_json=True)
         if not category_list:
             return

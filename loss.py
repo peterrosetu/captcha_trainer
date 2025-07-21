@@ -21,7 +21,7 @@ class Loss(object):
         print('logits', logits.shape)
         print('target', target.shape)
         # logits = tf.reshape(tensor=logits, shape=[tf.shape(labels)[0], None])
-        return tf.keras.backend.sparse_categorical_crossentropy(
+        return tf.compat.v1.keras.backend.sparse_categorical_crossentropy(
             target=target,
             output=logits,
             from_logits=True,
@@ -31,7 +31,7 @@ class Loss(object):
     def ctc(labels, logits, sequence_length):
         """CTC 损失函数"""
 
-        return tf.nn.ctc_loss_v2(
+        return tf.compat.v1.nn.ctc_loss_v2(
             labels=labels,
             logits=logits,
             logit_length=sequence_length,

@@ -7,6 +7,32 @@ from config import ModelConfig
 from tensorflow.python.keras.regularizers import l1
 
 
+class CNN3(object):
+
+    """
+    CNN5网络的实现
+    """
+    def __init__(self, model_conf: ModelConfig, inputs: tf.Tensor, utils: NetworkUtils):
+        """
+        :param model_conf: 从配置文件
+        :param inputs: 网络上一层输入 tf.keras.layers.Input / tf.Tensor 类型
+        :param utils: 网络工具类
+        """
+        self.model_conf = model_conf
+        self.inputs = inputs
+        self.utils = utils
+        self.loss_func = self.model_conf.loss_func
+
+    def build(self):
+        with tf.keras.backend.name_scope("CNN3"):
+            x = self.utils.cnn_layer(0, inputs=self.inputs, kernel_size=7, filters=32, strides=(1, 1))
+            x = self.utils.cnn_layer(1, inputs=x, kernel_size=5, filters=64, strides=(1, 2))
+            x = self.utils.cnn_layer(2, inputs=x, kernel_size=3, filters=64, strides=(1, 2))
+            shape_list = x.get_shape().as_list()
+            print("x.get_shape()", shape_list)
+            return self.utils.reshape_layer(x, self.loss_func, shape_list)
+
+
 class CNN5(object):
 
     """
@@ -54,7 +80,7 @@ class CNNX(object):
             kernel_initializer=self.utils.msra_initializer(kernel_size, filters),
             padding='SAME',
         )(inputs)
-        inputs = tf.layers.batch_normalization(
+        inputs = tf.compat.v1.layers.batch_normalization(
             inputs,
             reuse=False,
             momentum=0.9,
